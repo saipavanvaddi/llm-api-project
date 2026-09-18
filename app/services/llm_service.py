@@ -143,3 +143,82 @@ def extract_order(text: str) -> OrderInfo:
     )
 
     return response.output_parsed
+
+
+import json
+
+from app.tools.order_tools import get_order_status
+
+
+order_tools = [
+    {
+        "type": "function",
+        "name": "get_order_status",
+        "description": "Get the current status of a food delivery order.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "integer",
+                    "description": "The ID of the food order.",
+                }
+            },
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+]
+
+
+# def chat_with_tools(user_message: str):
+
+#     response = client.responses.create(
+#         model="gpt-5-mini",
+#         input=user_message,
+#         tools=order_tools,
+#     )
+#     # At this point the model can request the tool.
+#     # But our backend still needs to execute it.
+#     return response
+
+def chat_with_tools(user_message: str):
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        input=user_message,
+        tools=order_tools,
+    )
+
+    tool_outputs = []
+
+    for item in response.output:
+
+        if item.type == "function_call":
+
+            if item.name == "get_order_status":
+
+                arguments = json.loads(item.arguments)
+
+                result = get_order_status(
+                    arguments["order_id"]
+                )
+
+                tool_outputs.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(result),
+                })
+
+    if tool_outputs:
+
+        final_response = client.responses.create(
+            model="gpt-5-mini",
+            previous_response_id=response.id,
+            input=tool_outputs,
+            tools=order_tools,
+        )
+
+        return final_response.output_text
+
+    return response.output_text

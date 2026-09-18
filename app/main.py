@@ -145,3 +145,16 @@ def extract_order_endpoint(
     result = extract_order(request.text)
 
     return result
+
+from app.services.llm_service import chat_with_tools
+
+@app.post("/api/chat/tools")
+def chat_tools(request: ChatRequest):
+
+    answer = chat_with_tools(
+        request.prompt
+    )
+
+    return {
+        "answer": answer
+    }
