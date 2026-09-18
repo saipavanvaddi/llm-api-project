@@ -191,3 +191,23 @@ def chat_database_tool(request: ChatRequest):
     return {
         "answer": answer
     }
+
+
+class SecureChatRequest(BaseModel):
+    prompt: str
+    user_id: int
+
+
+from app.services.llm_service import chat_with_tool_chain
+
+@app.post("/api/chat/tool-chain")
+def chat_tool_chain(request: SecureChatRequest):
+
+    answer = chat_with_tool_chain(
+        request.prompt,
+        request.user_id,
+    )
+
+    return {
+        "answer": answer
+    }
