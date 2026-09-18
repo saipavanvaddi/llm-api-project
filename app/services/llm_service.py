@@ -115,3 +115,31 @@ def generate_structured_restaurant(
     )
 
     return response.output_parsed
+
+
+from app.schemas.order import OrderInfo
+
+
+def extract_order(text: str) -> OrderInfo:
+
+    response = client.responses.parse(
+        model="gpt-5-mini",
+
+        input=[
+            {
+                "role": "developer",
+                "content": (
+                    "Extract food order information from the "
+                    "user's text. Calculate the total price."
+                ),
+            },
+            {
+                "role": "user",
+                "content": text,
+            },
+        ],
+
+        text_format=OrderInfo,
+    )
+
+    return response.output_parsed

@@ -128,3 +128,20 @@ def structured_chat(
     return result
 
 
+from app.schemas.order import OrderInfo
+from app.schemas.order_request import OrderExtractionRequest
+
+from app.services.llm_service import extract_order
+
+
+@app.post(
+    "/api/chat/extract-order",
+    response_model=OrderInfo,
+)
+def extract_order_endpoint(
+    request: OrderExtractionRequest,
+):
+
+    result = extract_order(request.text)
+
+    return result
