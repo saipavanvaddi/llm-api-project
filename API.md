@@ -256,7 +256,7 @@ Extract a structured food order (line items + total price) from free-form text.
 
 ## POST /api/chat/tools
 
-Answer a prompt using function calling: the model can call the `get_order_status` tool to look up a food delivery order by ID, and the answer is generated from the tool's result.
+Answer a prompt using function calling. Only `get_order_status` results are handled — the endpoint advertises both order tools (see the shared `order_tools` list in `app/services/llm_service.py`), but its handler ignores any other tool call by name.
 
 **Request body**
 
@@ -270,11 +270,7 @@ Answer a prompt using function calling: the model can call the `get_order_status
 }
 ```
 
-**Response `200`**
-
-| Field  | Type   |
-|--------|--------|
-| answer | string |
+**Response `200`** — model called `get_order_status`
 
 ```json
 {
@@ -282,11 +278,131 @@ Answer a prompt using function calling: the model can call the `get_order_status
 }
 ```
 
-Known order IDs (see `app/tools/order_tools.py`): `101` Preparing, `102` Ready for pickup, `103` Out for delivery, `104` Delivered. Any other ID returns "Order not found".
+**Response `200`** — model called `get_order_items` instead ⚠️
+
+Because the model can also see `get_order_items` (it shares the `order_tools` schema list with `/api/chat/multi-tools`), a prompt like `"What items are in order 101?"` can lead the model to call `get_order_items`. `chat_with_tools()` only recognizes `get_order_status` by name and silently drops any other tool call, so no tool output is sent back and the endpoint returns an empty answer:
+
+```json
+{
+  "answer": ""
+}
+```
+
+Known order IDs (see `app/tools/order_tools.py`): `101` Preparing, `102` Ready for pickup, `103` Out for delivery, `104` Delivered. Any other ID returns `{"order_id": <id>, "status": "Order not found"}`.
+
+---
+
+## POST /api/chat/multi-tools
+
+Answer a prompt using function calling, choosing between two tools — `get_order_status` and `get_order_items` — based on the prompt. Both tools take the same `order_id: integer` argument.
+
+**Request body**
+
+| Field  | Type   | Required |
+|--------|--------|----------|
+| prompt | string | yes      |
+
+```json
+{
+  "prompt": "What items are in order 103?"
+}
+```
+
+**Response `200`**
+
+| Field  | Type   |
+|--------|--------|
+| answer | string |
+
+**Case 1 — model calls `get_order_status`**
+
+Request:
+
+```json
+{
+  "prompt": "What is the status of order 103?"
+}
+```
+
+Tool call: `get_order_status(order_id=103)` → `{"order_id": 103, "status": "Out for delivery"}`
+
+Response:
+
+```json
+{
+  "answer": "Order 103 is out for delivery."
+}
+```
+
+**Case 2 — model calls `get_order_items`, order found**
+
+Request:
+
+```json
+{
+  "prompt": "What items are in order 101?"
+}
+```
+
+Tool call: `get_order_items(order_id=101)` → `{"order_id": 101, "items": [{"name": "Chicken Biryani", "quantity": 2}, {"name": "Coke", "quantity": 1}]}`
+
+Response:
+
+```json
+{
+  "answer": "Order 101 contains:\n- Chicken Biryani — 2\n- Coke — 1"
+}
+```
+
+**Case 3 — model calls `get_order_items`, order not found**
+
+Request:
+
+```json
+{
+  "prompt": "What items are in order 999?"
+}
+```
+
+Tool call: `get_order_items(order_id=999)` → `{"order_id": 999, "items": [], "message": "Order not found"}`
+
+Response (wording varies — the model summarizes the tool output, it isn't returned verbatim):
+
+```json
+{
+  "answer": "I couldn't find order 999 — it doesn't exist in our system."
+}
+```
+
+**Case 4 — no tool call needed**
+
+For a prompt that doesn't relate to an order (e.g. a general question), the model answers directly without calling either tool:
+
+```json
+{
+  "prompt": "What is your refund policy in general?"
+}
+```
+
+```json
+{
+  "answer": "I don't have a specific refund policy to share — that depends on the vendor or store you purchased from..."
+}
+```
+
+**Available tools**
+
+| Tool               | Arguments          | Description                             | Sample IDs   |
+|---------------------|--------------------|------------------------------------------|--------------|
+| `get_order_status`  | `order_id: integer`| Current status of a food delivery order   | `101`–`104`  |
+| `get_order_items`   | `order_id: integer`| Line items in a food delivery order       | `101`, `102` |
+
+Sample data lives in `app/tools/order_tools.py`. Note the two tools currently use different mock datasets: `get_order_status` knows orders `101`–`104`, while `get_order_items` only knows `101` and `102` — asking for the status of `101`/`102` and the items of `103`/`104` are both valid requests, but only one of the two tools will have data for the full `101`–`104` range.
 
 ---
 
 ## Notes
 
-- `/api/chat`, `/api/chat/instructions`, `/api/chat/conversation`, `/api/chat/structured`, `/api/chat/extract-order`, and `/api/chat/tools` do not currently catch OpenAI API errors — a failure upstream (bad input, rate limit, etc.) returns an unhandled `500 Internal Server Error`. `/api/chat/safe` is the only endpoint with graceful error handling (`502`); the same pattern can be applied to the others.
+- `/api/chat`, `/api/chat/instructions`, `/api/chat/conversation`, `/api/chat/structured`, `/api/chat/extract-order`, `/api/chat/tools`, and `/api/chat/multi-tools` do not currently catch OpenAI API errors — a failure upstream (bad input, rate limit, etc.) returns an unhandled `500 Internal Server Error`. `/api/chat/safe` is the only endpoint with graceful error handling (`502`); the same pattern can be applied to the others.
 - Validation errors (e.g. missing `prompt` field) return FastAPI's default `422 Unprocessable Entity` with a `detail` array describing the offending field.
+- `/api/chat/tools` and `/api/chat/multi-tools` share the same `order_tools` tool-schema list in `app/services/llm_service.py`. `/api/chat/tools`'s handler (`chat_with_tools`) only processes `get_order_status` calls, so if a prompt leads the model to call `get_order_items` there instead, the tool call is silently dropped and the endpoint returns `{"answer": ""}`. See the `/api/chat/tools` section above.

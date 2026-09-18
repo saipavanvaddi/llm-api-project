@@ -158,3 +158,14 @@ def chat_tools(request: ChatRequest):
     return {
         "answer": answer
     }
+
+from app.services.llm_service import chat_with_multiple_tools
+
+@app.post("/api/chat/multi-tools")
+def chat_multiple_tools(request: ChatRequest):
+
+    answer = chat_with_multiple_tools(request.prompt)
+
+    return {
+        "answer": answer
+    }

@@ -17,3 +17,5 @@ pip install fastapi uvicorn openai python-dotenv
 
 
 uvicorn app.main:app --reload
+
+pip install psycopg[binary]
