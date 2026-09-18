@@ -169,3 +169,25 @@ def chat_multiple_tools(request: ChatRequest):
     return {
         "answer": answer
     }
+
+from app.services.llm_service import chat_with_safe_tools
+
+@app.post("/api/chat/safe-tools")
+def chat_safe_tools(request: ChatRequest):
+
+    answer = chat_with_safe_tools(request.prompt)
+
+    return {
+        "answer": answer
+    }
+
+from app.services.llm_service import chat_with_database_tool
+
+@app.post("/api/chat/db-tools")
+def chat_database_tool(request: ChatRequest):
+
+    answer = chat_with_database_tool(request.prompt)
+
+    return {
+        "answer": answer
+    }

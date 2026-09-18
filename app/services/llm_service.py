@@ -244,6 +244,90 @@ def chat_with_tools(user_message: str):
     return response.output_text
 
 
+from app.tools.safe_order_tools import get_order_status_safe
+
+
+safe_order_tools = [
+    {
+        "type": "function",
+        "name": "get_order_status_safe",
+        "description": "Get the current status of a food delivery order.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "integer",
+                    "description": "The food delivery order ID.",
+                }
+            },
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+]
+
+
+def chat_with_safe_tools(user_message: str):
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        input=user_message,
+        tools=safe_order_tools,
+    )
+
+    tool_outputs = []
+
+    for item in response.output:
+
+        if item.type != "function_call":
+            continue
+
+        try:
+
+            arguments = json.loads(item.arguments)
+
+            if item.name == "get_order_status_safe":
+
+                result = get_order_status_safe(
+                    arguments["order_id"]
+                )
+
+                tool_outputs.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": item.call_id,
+                        "output": json.dumps(result),
+                    }
+                )
+
+        except Exception:
+
+            tool_outputs.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "success": False,
+                        "error": "Tool execution failed",
+                    }),
+                }
+            )
+
+    if tool_outputs:
+
+        final_response = client.responses.create(
+            model="gpt-5-mini",
+            previous_response_id=response.id,
+            input=tool_outputs,
+            tools=safe_order_tools,
+        )
+
+        return final_response.output_text
+
+    return response.output_text
+
+
 def chat_with_multiple_tools(user_message: str):
 
     response = client.responses.create(
@@ -286,6 +370,75 @@ def chat_with_multiple_tools(user_message: str):
             previous_response_id=response.id,
             input=tool_outputs,
             tools=order_tools,
+        )
+
+        return final_response.output_text
+
+    return response.output_text
+
+
+from app.tools.db_tools import get_order_status_from_db
+
+
+database_order_tools = [
+    {
+        "type": "function",
+        "name": "get_order_status_from_db",
+        "description": "Get the current status of a food delivery order from the database.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "integer",
+                    "description": "The ID of the food delivery order.",
+                }
+            },
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+]
+
+
+def chat_with_database_tool(user_message: str):
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        input=user_message,
+        tools=database_order_tools,
+    )
+
+    tool_outputs = []
+
+    for item in response.output:
+
+        if item.type != "function_call":
+            continue
+
+        arguments = json.loads(item.arguments)
+
+        if item.name == "get_order_status_from_db":
+
+            result = get_order_status_from_db(
+                arguments["order_id"]
+            )
+
+            tool_outputs.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(result),
+                }
+            )
+
+    if tool_outputs:
+
+        final_response = client.responses.create(
+            model="gpt-5-mini",
+            previous_response_id=response.id,
+            input=tool_outputs,
+            tools=database_order_tools,
         )
 
         return final_response.output_text
